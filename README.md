@@ -283,6 +283,4 @@ The application is intended to support HR analysis and decision-making, not repl
 
 ### Predict. Explain. Retain.
 
-*Making Employee Attrition Prediction More Understandable Through Explainable AI.*
-
-⭐ If you find this project interesting, consider giving the repository a star!
+*Making Employee Attrition Prediction More Understandable Through Explainable AI.
