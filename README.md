@@ -169,7 +169,7 @@ employee-attrition-xai/
 └── requirements.txt
 ```
 
-*Note: This is the main project structure. Additional files and folders may exist in the repository.*
+*Note: This is the main project structure. Additional files and folders exists in the repository.*
 
 ---
 
