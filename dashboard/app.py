@@ -1,13 +1,21 @@
 from lime.lime_tabular import LimeTabularExplainer
 import streamlit.components.v1 as components
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    classification_report
+)
 import shap
 import matplotlib.pyplot as plt
 import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-
+import seaborn as sns
 st.set_page_config(
     page_title="Employee Attrition Prediction",
     page_icon="👥",
@@ -117,7 +125,7 @@ X = pd.get_dummies(X, drop_first=True, dtype=int)
 X = X.reindex(columns=feature_names, fill_value=0)
 
 # Recreate the training split
-X_train, _, y_train, _ = train_test_split(
+X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,
     test_size=0.2,
@@ -308,41 +316,121 @@ border: 1px solid #334155;
     st.stop()
 
 
+
 if page == "Model Comparison":
     st.title("Model Performance Comparison")
 
     st.write(
         "Comparison of Decision Tree and Random Forest "
-        "on the same test dataset."
+        "using the same unseen test dataset."
     )
 
+    # Generate predictions
+    dt_predictions = decision_tree_model.predict(X_test)
+    rf_predictions = random_forest_model.predict(X_test)
+
+    # Calculate evaluation metrics
     comparison = pd.DataFrame({
-        "Metric": ["Accuracy", "Attrition Precision", "Attrition Recall", "Attrition F1-score"],
-        "Decision Tree": [77.21, 36, 53, 43],
-        "Random Forest": [83.33, 47, 32, 38]
+        "Metric": [
+            "Accuracy",
+            "Attrition Precision",
+            "Attrition Recall",
+            "Attrition F1-score"
+        ],
+        "Decision Tree": [
+            accuracy_score(y_test, dt_predictions) * 100,
+            precision_score(y_test, dt_predictions, zero_division=0) * 100,
+            recall_score(y_test, dt_predictions, zero_division=0) * 100,
+            f1_score(y_test, dt_predictions, zero_division=0) * 100
+        ],
+        "Random Forest": [
+            accuracy_score(y_test, rf_predictions) * 100,
+            precision_score(y_test, rf_predictions, zero_division=0) * 100,
+            recall_score(y_test, rf_predictions, zero_division=0) * 100,
+            f1_score(y_test, rf_predictions, zero_division=0) * 100
+        ]
     })
 
-    st.dataframe(comparison, hide_index=True, use_container_width=True)
+    # Display metrics
+    st.subheader("Evaluation Metrics")
+
+    display_comparison = comparison.copy()
+
+    for column in ["Decision Tree", "Random Forest"]:
+        display_comparison[column] = display_comparison[column].map(
+            lambda value: f"{value:.2f}%"
+        )
+
+    st.dataframe(
+        display_comparison,
+        hide_index=True,
+        use_container_width=True
+    )
+
+    # Performance chart
     st.subheader("Model Performance Visualization")
 
     chart_data = comparison.set_index("Metric")
-
     st.bar_chart(chart_data)
+
+    # Confusion matrices
     st.subheader("Confusion Matrix Comparison")
+
+    dt_cm = confusion_matrix(y_test, dt_predictions, labels=[0, 1])
+    rf_cm = confusion_matrix(y_test, rf_predictions, labels=[0, 1])
+    st.subheader("Confusion Matrix Heatmaps")
 
     col1, col2 = st.columns(2)
 
+    with col1:
+        st.write("Decision Tree")
+
+        fig, ax = plt.subplots()
+        sns.heatmap(
+            dt_cm,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            xticklabels=["Stay", "Leave"],
+            yticklabels=["Stay", "Leave"],
+            ax=ax
+        )
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Actual")
+        st.pyplot(fig)
+        plt.close(fig)
+
+    with col2:
+        st.write("Random Forest")
+
+        fig, ax = plt.subplots()
+        sns.heatmap(
+            rf_cm,
+            annot=True,
+            fmt="d",
+            cmap="Greens",
+            xticklabels=["Stay", "Leave"],
+            yticklabels=["Stay", "Leave"],
+            ax=ax
+        )
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Actual")
+        st.pyplot(fig)
+        plt.close(fig)
+
     decision_tree_cm = pd.DataFrame(
-        [[202, 45], [22, 25]],
+        dt_cm,
         index=["Actual Stayed", "Actual Left"],
         columns=["Predicted Stayed", "Predicted Left"]
     )
 
     random_forest_cm = pd.DataFrame(
-        [[230, 17], [32, 15]],
+        rf_cm,
         index=["Actual Stayed", "Actual Left"],
         columns=["Predicted Stayed", "Predicted Left"]
     )
+
+    col1, col2 = st.columns(2)
 
     with col1:
         st.write("Decision Tree")
@@ -351,36 +439,107 @@ if page == "Model Comparison":
     with col2:
         st.write("Random Forest")
         st.dataframe(random_forest_cm)
-        
+
+    # Classification reports
     st.subheader("Classification Report")
+
+    dt_report = classification_report(
+        y_test,
+        dt_predictions,
+        labels=[0, 1],
+        target_names=["Stayed", "Left"],
+        output_dict=True,
+        zero_division=0
+    )
+
+    rf_report = classification_report(
+        y_test,
+        rf_predictions,
+        labels=[0, 1],
+        target_names=["Stayed", "Left"],
+        output_dict=True,
+        zero_division=0
+    )
 
     report = pd.DataFrame({
         "Class": ["Stayed", "Left"],
-        "Decision Tree Precision": [90, 36],
-        "Decision Tree Recall": [82, 53],
-        "Decision Tree F1-score": [86, 43],
-        "Random Forest Precision": [88, 47],
-        "Random Forest Recall": [93, 32],
-        "Random Forest F1-score": [90, 38]
+        "Decision Tree Precision": [
+            dt_report["Stayed"]["precision"] * 100,
+            dt_report["Left"]["precision"] * 100
+        ],
+        "Decision Tree Recall": [
+            dt_report["Stayed"]["recall"] * 100,
+            dt_report["Left"]["recall"] * 100
+        ],
+        "Decision Tree F1-score": [
+            dt_report["Stayed"]["f1-score"] * 100,
+            dt_report["Left"]["f1-score"] * 100
+        ],
+        "Random Forest Precision": [
+            rf_report["Stayed"]["precision"] * 100,
+            rf_report["Left"]["precision"] * 100
+        ],
+        "Random Forest Recall": [
+            rf_report["Stayed"]["recall"] * 100,
+            rf_report["Left"]["recall"] * 100
+        ],
+        "Random Forest F1-score": [
+            rf_report["Stayed"]["f1-score"] * 100,
+            rf_report["Left"]["f1-score"] * 100
+        ]
     })
 
-    st.dataframe(report, hide_index=True, use_container_width=True)
+    st.dataframe(
+        report.style.format({
+            column: "{:.2f}%"
+            for column in report.columns
+            if column != "Class"
+        }),
+        hide_index=True,
+        use_container_width=True
+    )
 
+    # Accuracy comparison
     st.subheader("Accuracy Comparison")
-    col1, col2 = st.columns(2)
-    col1.metric("Decision Tree", "77.21%")
-    col2.metric("Random Forest", "83.33%")
 
-    st.subheader("Important Observation")
-    st.write("""
-    - Random Forest achieved higher accuracy.
-    - Random Forest achieved higher attrition precision.
-    - Decision Tree achieved higher attrition recall and F1-score.
-    """)
+    col1, col2 = st.columns(2)
+
+    dt_accuracy = accuracy_score(y_test, dt_predictions) * 100
+    rf_accuracy = accuracy_score(y_test, rf_predictions) * 100
+
+    col1.metric("Decision Tree", f"{dt_accuracy:.2f}%")
+    col2.metric("Random Forest", f"{rf_accuracy:.2f}%")
+
+    # Important observations
+    st.subheader("Important Observations")
+
+    dt_recall = recall_score(
+        y_test, dt_predictions, zero_division=0
+    ) * 100
+
+    rf_recall = recall_score(
+        y_test, rf_predictions, zero_division=0
+    ) * 100
+
+    if dt_accuracy > rf_accuracy:
+        st.write("Decision Tree achieved higher accuracy.")
+    elif rf_accuracy > dt_accuracy:
+        st.write("Random Forest achieved higher accuracy.")
+    else:
+        st.write("Both models achieved the same accuracy.")
+
+    if dt_recall > rf_recall:
+        st.write("Decision Tree identified more actual attrition cases.")
+    elif rf_recall > dt_recall:
+        st.write("Random Forest identified more actual attrition cases.")
+    else:
+        st.write("Both models achieved the same attrition recall.")
 
     st.info(
-        "For employee attrition prediction, recall is important "
-        "because missing employees who may leave can be costly."
+        "Attrition recall is important because it measures how many "
+        "employees who actually left were correctly identified by "
+        "the model. These predictions should support, not replace, "
+        "human HR review."
     )
 
     st.stop()
@@ -510,16 +669,25 @@ if page == "About Project":
     6. SHAP and LIME Explanations
     7. Streamlit Dashboard Development
     """)
-
     st.divider()
-
     st.subheader("Key Findings")
 
-    st.markdown("""
-    - Decision Tree accuracy: 77.21%
-    - Random Forest accuracy: 83.33%
-    - Decision Tree attrition recall: 53%
-    - Random Forest attrition recall: 32%
+    # Calculate predictions using test data
+    dt_predictions = decision_tree_model.predict(X_test)
+    rf_predictions = random_forest_model.predict(X_test)
+
+    # Calculate actual metrics
+    dt_accuracy = accuracy_score(y_test, dt_predictions) * 100
+    rf_accuracy = accuracy_score(y_test, rf_predictions) * 100
+
+    dt_recall = recall_score(y_test, dt_predictions, zero_division=0) * 100
+    rf_recall = recall_score(y_test, rf_predictions, zero_division=0) * 100
+
+    st.markdown(f"""
+    - Decision Tree accuracy: {dt_accuracy:.2f}%
+    - Random Forest accuracy: {rf_accuracy:.2f}%
+    - Decision Tree attrition recall: {dt_recall:.2f}%
+    - Random Forest attrition recall: {rf_recall:.2f}%
     """)
 
     st.info(
@@ -530,7 +698,6 @@ if page == "About Project":
 
     st.success("Employee Attrition Prediction Project")
     st.stop()
-
 
 
 st.write(
@@ -590,8 +757,24 @@ with st.form("employee_form"):
     submitted = st.form_submit_button(
         "Predict Attrition"
     )
-
 if submitted:
+    st.session_state["show_prediction"] = True
+    st.session_state.pop("retention_scenario", None)
+
+    # Save employee details and selected model
+    st.session_state["saved_input_data"] = input_data.copy()
+    st.session_state["saved_model_choice"] = model_choice
+
+if submitted or st.session_state.get("show_prediction", False):
+
+    # Restore saved employee details and model
+    input_data = st.session_state.get("saved_input_data", input_data)
+    model_choice = st.session_state.get("saved_model_choice", model_choice)
+
+    if model_choice == "Decision Tree":
+        model = decision_tree_model
+    else:
+        model = random_forest_model
 
     input_df = pd.DataFrame([input_data])
 
@@ -622,13 +805,12 @@ if submitted:
 
     result = "Likely to Leave" if prediction == 1 else "Likely to Stay"
 
-    
-
-    st.session_state.prediction_history.append({
-        "Model": model_choice,
-        "Prediction": result,
-        "Probability of Leaving": f"{probability[1] * 100:.2f}%",
-        "Date": pd.Timestamp.now().strftime("%d-%m-%Y %H:%M:%S")
+    if submitted:
+        st.session_state.prediction_history.append({
+            "Model": model_choice,
+            "Prediction": result,
+            "Probability of Leaving": f"{probability[1] * 100:.2f}%",
+            "Date": pd.Timestamp.now().strftime("%d-%m-%Y %H:%M:%S")
     })
     st.subheader("Prediction Result")
 
@@ -751,57 +933,585 @@ if submitted:
         height=700,
         scrolling=True
     )
+    
+    # ==========================================
+    # EMPLOYEE EXIT IMPACT ANALYSIS
+    # ==========================================
 
-    # Download Prediction Report
+    st.divider()
+    st.subheader("Employee Exit Impact Analysis")
+
+    st.write(
+        "Review employee information to identify areas "
+        "that may require attention during a transition."
+    )
+
+    # Extract employee information
+    job_role = input_data["JobRole"]
+    job_level = input_data["JobLevel"]
+    years_company = input_data["YearsAtCompany"]
+    years_role = input_data["YearsInCurrentRole"]
+    total_experience = input_data["TotalWorkingYears"]
+    training = input_data["TrainingTimesLastYear"]
+
+    st.write("### Employee Profile")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Job Role", job_role)
+    col2.metric("Job Level", job_level)
+    col3.metric("Years at Company", years_company)
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Years in Current Role", years_role)
+    col2.metric("Total Experience", total_experience)
+    col3.metric("Training Last Year", training)
+
+    st.write("### Transition Planning Indicators")
+
+    indicators = []
+
+    if job_level >= 4:
+        indicators.append({
+            "Indicator": "Senior job level",
+            "Observation": "Review responsibilities and handover requirements."
+        })
+
+    if years_company >= employee_data["YearsAtCompany"].median():
+        indicators.append({
+            "Indicator": "Longer organizational tenure",
+            "Observation": "Review accumulated knowledge and ongoing responsibilities."
+        })
+
+    if years_role >= employee_data["YearsInCurrentRole"].median():
+        indicators.append({
+            "Indicator": "Longer time in current role",
+            "Observation": "Identify role-specific tasks that may need documentation."
+        })
+
+    if training <= employee_data["TrainingTimesLastYear"].median():
+        indicators.append({
+            "Indicator": "Training activity",
+            "Observation": "Check whether another team member needs additional training."
+        })
+
+    if indicators:
+        indicator_df = pd.DataFrame(indicators)
+        st.dataframe(
+            indicator_df,
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.success(
+            "No specific transition-planning indicators "
+            "were identified from these selected fields."
+        )
+
+    st.write("### HR Review Checklist")
+
+    st.markdown("""
+    - Review the employee's key responsibilities.
+    - Identify tasks that require specialized knowledge.
+    - Check whether another employee can handle those tasks.
+    - Prepare documentation and knowledge-transfer plans.
+    - Estimate recruitment and training requirements separately.
+    """)
+
+    st.info(
+        "This assessment uses employee profile indicators as "
+        "prompts for HR review. It does not measure actual "
+        "business loss, employee value, or replacement difficulty. "
+        "A human HR review is required."
+    )
+
+    # ==========================================
+    # AI EMPLOYEE RETENTION RECOMMENDATIONS
+    # ==========================================
+
+    st.divider()
+    st.subheader("AI Employee Retention Recommendations")
+
+    st.write(
+        "Personalized suggestions based on the employee's "
+        "workplace information."
+    )
+
+    recommendations = []
+
+    if input_data["OverTime"] == "Yes":
+        recommendations.append({
+            "Area": "Work-life balance",
+            "Observation": "Employee works overtime.",
+            "Recommendation": "Review workload, overtime frequency and staffing requirements."
+        })
+
+    if input_data["JobSatisfaction"] <= 2:
+        recommendations.append({
+            "Area": "Job satisfaction",
+            "Observation": "Job satisfaction is relatively low.",
+            "Recommendation": "Discuss workplace concerns and explore suitable role improvements."
+        })
+
+    if input_data["EnvironmentSatisfaction"] <= 2:
+        recommendations.append({
+            "Area": "Work environment",
+            "Observation": "Environment satisfaction is relatively low.",
+            "Recommendation": "Collect feedback about the work environment and identify improvements."
+        })
+
+    if input_data["WorkLifeBalance"] <= 2:
+        recommendations.append({
+            "Area": "Work-life balance",
+            "Observation": "Work-life balance rating is relatively low.",
+            "Recommendation": "Consider flexible working arrangements and workload adjustments."
+        })
+
+    if input_data["RelationshipSatisfaction"] <= 2:
+        recommendations.append({
+            "Area": "Workplace relationships",
+            "Observation": "Relationship satisfaction is relatively low.",
+            "Recommendation": "Encourage constructive feedback, mentoring and team communication."
+        })
+
+    if input_data["YearsSinceLastPromotion"] >= employee_data["YearsSinceLastPromotion"].median():
+        recommendations.append({
+            "Area": "Career growth",
+            "Observation": "Time since last promotion is relatively high.",
+            "Recommendation": "Discuss career goals, promotion criteria and development opportunities."
+        })
+
+    if input_data["TrainingTimesLastYear"] <= employee_data["TrainingTimesLastYear"].median():
+        recommendations.append({
+            "Area": "Learning and development",
+            "Observation": "Training activity is relatively low.",
+            "Recommendation": "Explore relevant training programs and skill-development opportunities."
+        })
+
+    if recommendations:
+        recommendation_df = pd.DataFrame(recommendations)
+
+        st.dataframe(
+            recommendation_df,
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.success(
+            "No specific improvement areas were identified "
+            "by these simple rules. Continue regular employee feedback."
+        )
+
+    st.info(
+        "These recommendations are rule-based suggestions, "
+        "not guaranteed solutions. HR should discuss them "
+        "with the employee before taking action."
+    )
+    
+    # ==========================================
+    # WHAT-IF RETENTION SIMULATOR
+    # ==========================================
+
+    st.divider()
+    
+    st.subheader("What-if Retention Simulator")
+
+    st.write(
+        "Explore how changing selected employee factors "
+        "affects the model's attrition prediction."
+    )
+
+    with st.form("retention_simulator_form"):
+
+        st.write("### Adjust Employee Factors")
+
+        scenario_overtime = st.selectbox(
+            "Overtime",
+            ["No", "Yes"],
+            index=["No", "Yes"].index(input_data["OverTime"])
+        )
+
+        scenario_job_satisfaction = st.slider(
+            "Job Satisfaction", 1, 4,
+            int(input_data["JobSatisfaction"])
+        )
+
+        scenario_environment = st.slider(
+            "Environment Satisfaction", 1, 4,
+            int(input_data["EnvironmentSatisfaction"])
+        )
+
+        scenario_worklife = st.slider(
+            "Work-Life Balance", 1, 4,
+            int(input_data["WorkLifeBalance"])
+        )
+
+        scenario_training = st.slider(
+            "Training Times Last Year",
+            int(employee_data["TrainingTimesLastYear"].min()),
+            int(employee_data["TrainingTimesLastYear"].max()),
+            int(input_data["TrainingTimesLastYear"])
+        )
+
+        simulate = st.form_submit_button(
+            "Simulate Retention Scenario"
+        )
+
+    if simulate:
+
+        scenario_data = input_data.copy()
+
+        scenario_data["OverTime"] = scenario_overtime
+        scenario_data["JobSatisfaction"] = scenario_job_satisfaction
+        scenario_data["EnvironmentSatisfaction"] = scenario_environment
+        scenario_data["WorkLifeBalance"] = scenario_worklife
+        scenario_data["TrainingTimesLastYear"] = scenario_training
+
+        scenario_df = pd.DataFrame([scenario_data])
+
+        for col in categorical_columns:
+            categories = sorted(
+                employee_data[col].dropna().unique().tolist()
+            )
+            scenario_df[col] = pd.Categorical(
+                scenario_df[col],
+                categories=categories
+            )
+
+        scenario_encoded = pd.get_dummies(
+            scenario_df,
+            drop_first=True,
+            dtype=int
+        )
+
+        scenario_encoded = scenario_encoded.reindex(
+            columns=feature_names,
+            fill_value=0
+        )
+
+        scenario_prediction = model.predict(scenario_encoded)[0]
+
+        scenario_probability = model.predict_proba(
+            scenario_encoded
+        )[0]
+
+        st.session_state["retention_scenario"] = {
+            "original_risk": float(probability[1] * 100),
+            "scenario_risk": float(scenario_probability[1] * 100),
+            "prediction": int(scenario_prediction)
+        }
+
+    # Display saved results
+    if "retention_scenario" in st.session_state:
+
+        saved = st.session_state["retention_scenario"]
+
+        st.write("### Scenario Results")
+
+        col1, col2 = st.columns(2)
+
+        col1.metric(
+            "Original Attrition Risk",
+            f"{saved['original_risk']:.2f}%"
+        )
+
+        col2.metric(
+            "Scenario Attrition Risk",
+            f"{saved['scenario_risk']:.2f}%",
+            delta=f"{saved['scenario_risk'] - saved['original_risk']:+.2f}%"
+        )
+
+        st.write("### Scenario Prediction")
+
+        if saved["prediction"] == 1:
+            st.warning("Scenario result: Likely to Leave")
+        else:
+            st.success("Scenario result: Likely to Stay")
+
+        st.info(
+            "This is a model-based scenario, not proof that "
+            "changing these factors will cause an employee "
+            "to stay or leave. Actual outcomes may differ."
+        )
+            # Download Prediction Report
+    from io import BytesIO
+    from datetime import datetime
+    from xml.sax.saxutils import escape
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    )
+
     st.subheader("Download Prediction Report")
 
-    report_data = [
-        {
-            "Section": "Prediction",
-            "Factor": "Selected Model",
-            "Value": model_choice
-        },
-        {
-            "Section": "Prediction",
-            "Factor": "Result",
-            "Value": result
-        },
-        {
-            "Section": "Prediction",
-            "Factor": "Probability of Leaving",
-            "Value": f"{probability[1] * 100:.2f}%"
-        },
-        {
-            "Section": "Prediction",
-            "Factor": "Probability of Staying",
-            "Value": f"{probability[0] * 100:.2f}%"
-        }
+    # Create PDF in memory
+    pdf_buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        pdf_buffer,
+        pagesize=A4,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Title"],
+        textColor=colors.HexColor("#243B64"),
+        fontSize=22,
+        spaceAfter=8
+    )
+
+    heading_style = ParagraphStyle(
+        "SectionHeading",
+        parent=styles["Heading2"],
+        textColor=colors.HexColor("#243B64"),
+        spaceBefore=14,
+        spaceAfter=8
+    )
+
+    normal_style = styles["BodyText"]
+
+    elements = []
+
+    # Report title
+    elements.append(Paragraph("AttritionAI", title_style))
+    elements.append(
+        Paragraph("Employee Attrition Prediction Report", styles["Heading2"])
+    )
+    elements.append(
+        Paragraph(
+            f"Generated on: {datetime.now().strftime('%d-%m-%Y %I:%M %p')}",
+            normal_style
+        )
+    )
+    elements.append(Spacer(1, 15))
+
+    # Prediction summary
+    elements.append(Paragraph("1. Prediction Summary", heading_style))
+
+    prediction_data = [
+        ["Factor", "Result"],
+        ["Selected Model", str(model_choice)],
+        ["Prediction", str(result)],
+        ["Probability of Leaving", f"{probability[1] * 100:.2f}%"],
+        ["Probability of Staying", f"{probability[0] * 100:.2f}%"]
     ]
 
-    # Add SHAP results
-    for _, row in shap_importance.iterrows():
-        report_data.append({
-            "Section": "SHAP",
-            "Factor": row["Feature"],
-            "Value": row["SHAP Value"]
-        })
+    prediction_table = Table(
+        prediction_data,
+        colWidths=[2.5 * inch, 3.8 * inch]
+    )
 
-    # Add LIME results
-    for feature, value in lime_explanation.as_list():
-        report_data.append({
-            "Section": "LIME",
-            "Factor": feature,
-            "Value": value
-        })
+    prediction_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243B64")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("PADDING", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
+    ]))
 
-    report_df = pd.DataFrame(report_data)
-    csv_report = report_df.to_csv(index=False).encode("utf-8")
+    elements.append(prediction_table)
+
+    # Employee details
+    elements.append(Paragraph("2. Employee Information", heading_style))
+
+    employee_rows = [["Employee Feature", "Value"]]
+
+    for feature, value in input_data.items():
+        employee_rows.append([
+            str(feature),
+            str(value)
+        ])
+
+    employee_table = Table(
+        employee_rows,
+        colWidths=[2.5 * inch, 3.8 * inch],
+        repeatRows=1
+    )
+
+    employee_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243B64")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("PADDING", (0, 0), (-1, -1), 6),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE")
+    ]))
+
+    elements.append(employee_table)
+
+    # Exit impact analysis
+    elements.append(Paragraph("3. Employee Exit Impact Analysis", heading_style))
+
+    impact_fields = [
+        "JobRole",
+        "JobLevel",
+        "YearsAtCompany",
+        "YearsInCurrentRole",
+        "TotalWorkingYears",
+        "TrainingTimesLastYear"
+    ]
+
+    impact_rows = [["Indicator", "Employee Information"]]
+
+    for field in impact_fields:
+        if field in input_data:
+            impact_rows.append([
+                field,
+                str(input_data[field])
+            ])
+
+    impact_table = Table(
+        impact_rows,
+        colWidths=[2.5 * inch, 3.8 * inch]
+    )
+
+    impact_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243B64")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("PADDING", (0, 0), (-1, -1), 7)
+    ]))
+
+    elements.append(impact_table)
+
+    elements.append(Paragraph(
+        "These details can help HR plan knowledge transfer, "
+        "role continuity and employee transition support.",
+        normal_style
+    ))
+
+    # Retention recommendations
+    elements.append(Paragraph("4. Retention Recommendations", heading_style))
+
+    recommendations = []
+
+    if input_data.get("OverTime") == "Yes":
+        recommendations.append(
+            "Review overtime levels and consider a more balanced workload."
+        )
+
+    if input_data.get("JobSatisfaction", 5) <= 2:
+        recommendations.append(
+            "Discuss job satisfaction and identify possible workplace concerns."
+        )
+
+    if input_data.get("EnvironmentSatisfaction", 5) <= 2:
+        recommendations.append(
+            "Review the employee's work environment and support needs."
+        )
+
+    if input_data.get("WorkLifeBalance", 5) <= 2:
+        recommendations.append(
+            "Explore flexible working arrangements and work-life balance support."
+        )
+
+    if input_data.get("RelationshipSatisfaction", 5) <= 2:
+        recommendations.append(
+            "Encourage regular feedback and improve team relationships."
+        )
+
+    if input_data.get("YearsSinceLastPromotion", 0) >= 3:
+        recommendations.append(
+            "Review career growth opportunities and promotion pathways."
+        )
+
+    if input_data.get("TrainingTimesLastYear", 0) <= 1:
+        recommendations.append(
+            "Consider additional training and professional development."
+        )
+
+    if not recommendations:
+        recommendations.append(
+            "Continue regular employee feedback, career development "
+            "and workplace support."
+        )
+
+    for recommendation in recommendations:
+        elements.append(
+            Paragraph("• " + escape(recommendation), normal_style)
+        )
+        elements.append(Spacer(1, 5))
+
+    # What-if scenario results, if available
+    elements.append(Paragraph("5. What-if Retention Analysis", heading_style))
+
+    if "retention_scenario" in st.session_state:
+        saved = st.session_state["retention_scenario"]
+
+        scenario_rows = [
+            ["Scenario Metric", "Result"],
+            ["Original Attrition Risk", f"{saved['original_risk']:.2f}%"],
+            ["Scenario Attrition Risk", f"{saved['scenario_risk']:.2f}%"],
+            [
+                "Scenario Prediction",
+                "Likely to Leave" if saved["prediction"] == 1
+                else "Likely to Stay"
+            ]
+        ]
+
+        scenario_table = Table(
+            scenario_rows,
+            colWidths=[2.5 * inch, 3.8 * inch]
+        )
+
+        scenario_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#243B64")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("PADDING", (0, 0), (-1, -1), 8)
+        ]))
+
+        elements.append(scenario_table)
+
+        elements.append(Spacer(1, 8))
+        elements.append(Paragraph(
+            "Note: What-if results are model-based estimates. "
+            "They do not prove that changing these factors will "
+            "cause an employee to stay or leave.",
+            normal_style
+        ))
+
+    else:
+        elements.append(Paragraph(
+            "No what-if scenario has been generated for this prediction.",
+            normal_style
+        ))
+
+    # Disclaimer
+    elements.append(Spacer(1, 18))
+    elements.append(Paragraph("Disclaimer", heading_style))
+    elements.append(Paragraph(
+        "This report provides machine-learning-based estimates "
+        "for decision support only. Predictions should not be used "
+        "as the sole basis for employment decisions. HR should "
+        "consider employee feedback and additional context.",
+        normal_style
+    ))
+
+    # Generate PDF
+    doc.build(elements)
+
+    pdf_data = pdf_buffer.getvalue()
 
     st.download_button(
-        label="Download Employee Prediction Report",
-        data=csv_report,
-        file_name="employee_prediction_report.csv",
-        mime="text/csv"
+        label="Download Employee Prediction Report (PDF)",
+        data=pdf_data,
+        file_name="AttritionAI_Employee_Report.pdf",
+        mime="application/pdf"
     )
     st.subheader("Prediction History")
 
