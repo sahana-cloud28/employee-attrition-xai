@@ -143,24 +143,113 @@ numerical_columns = [
     col for col in employee_data.columns
     if col not in categorical_columns
 ]
+# ==========================================
+# PROFESSIONAL SIDEBAR DESIGN
+# ==========================================
 
-# Sidebar
-st.sidebar.title("Employee Attrition AI")
+st.markdown("""
+<style>
 
-st.sidebar.write("Explainable AI Dashboard")
+/* Sidebar background */
+[data-testid="stSidebar"] {
+    background: linear-gradient(
+        180deg,
+        #0F172A 0%,
+        #111C31 100%
+    );
+    border-right: 1px solid #263449;
+}
 
+/* Sidebar padding */
+[data-testid="stSidebar"] > div:first-child {
+    padding-top: 2rem;
+}
+
+/* Navigation heading */
+[data-testid="stSidebar"] h2 {
+    color: #FFFFFF;
+}
+
+/* Radio navigation spacing */
+[data-testid="stSidebar"] .stRadio > div {
+    gap: 9px;
+}
+
+/* Navigation items */
+[data-testid="stSidebar"] .stRadio label {
+    background: #19263B;
+    border: 1px solid #263750;
+    border-radius: 10px;
+    padding: 11px 14px;
+    transition: all 0.2s ease;
+}
+
+/* Hover effect */
+[data-testid="stSidebar"] .stRadio label:hover {
+    background: #243B5A;
+    border-color: #3B82F6;
+}
+
+/* Radio text */
+[data-testid="stSidebar"] .stRadio label p {
+    color: #E2E8F0 !important;
+    font-weight: 500;
+}
+
+/* Hide radio circles */
+[data-testid="stSidebar"] .stRadio label div:first-child {
+    display: none;
+}
+
+/* Sidebar divider */
+[data-testid="stSidebar"] hr {
+    border-color: #334155;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+
+
+st.title("Employee Attrition Prediction")
+
+# Project branding
+
+# ==========================================
+# ATTRITION AI SIDEBAR
+# ==========================================
+st.sidebar.markdown("""
+<div style="background-color:#19263B; padding:15px; border-radius:12px;">
+    <h2 style="color:white; margin:0;">👥 AttritionAI</h2>
+    <p style="color:#94A3B8; font-size:10px; letter-spacing:1px;">
+        WORKFORCE INTELLIGENCE
+    </p>
+</div>
+""", unsafe_allow_html=True)
+st.sidebar.markdown("### MAIN MENU")
 
 page = st.sidebar.radio(
     "Navigation",
-    ["Home", "Prediction", "Model Comparison", "EDA Insights", "About Project"]
-)
-st.sidebar.markdown("---")
-st.sidebar.info(
-    "This project uses Machine Learning, SHAP and LIME "
-    "to predict and explain employee attrition."
+    ["Home", "Prediction", "Model Comparison", "EDA Insights", "About Project"],
+    label_visibility="collapsed"
 )
 
-st.title("Employee Attrition Prediction")
+st.sidebar.markdown("---")
+
+st.sidebar.markdown("""
+<div style="background-color:#19263B; padding:15px; border-radius:12px;">
+    <h4 style="color:#60A5FA;">🧠 AI MODELS ACTIVE</h4>
+    <p style="color:white;">
+        ✓ Decision Tree<br>
+        ✓ Random Forest<br>
+        ✓ SHAP Explainability<br>
+        ✓ LIME Explainability
+    </p>
+    <p style="color:#22C55E;">● PROJECT DASHBOARD READY</p>
+</div>
+""", unsafe_allow_html=True)
+
 st.subheader("Explainable AI using SHAP and LIME")
 
 if page == "Home":
@@ -533,10 +622,7 @@ if submitted:
 
     result = "Likely to Leave" if prediction == 1 else "Likely to Stay"
 
-    if prediction == 1:
-        st.error("⚠️ This employee is predicted to be likely to leave.")
-    else:
-        st.success("✅ This employee is predicted to be likely to stay.")
+    
 
     st.session_state.prediction_history.append({
         "Model": model_choice,
@@ -641,7 +727,7 @@ if submitted:
         plt.close(fig)
     else:
         st.write("No factors pushed the prediction towards Staying.")
-
+        
     # LIME Explanation
     st.subheader("LIME Explanation")
     st.write("Why was this individual employee predicted this way?")
@@ -656,16 +742,17 @@ if submitted:
 
     lime_html = lime_explanation.as_html()
     lime_html = lime_html.replace(
-    "<body>",
-    '<body style="background-color: white; color: black;">'
-)
+        "<body>",
+        '<body style="background-color: white; color: black;">'
+    )
+
     components.html(
         lime_html,
         height=700,
         scrolling=True
-        )
-        # Download Prediction Report
+    )
 
+    # Download Prediction Report
     st.subheader("Download Prediction Report")
 
     report_data = [
@@ -708,7 +795,6 @@ if submitted:
         })
 
     report_df = pd.DataFrame(report_data)
-
     csv_report = report_df.to_csv(index=False).encode("utf-8")
 
     st.download_button(
@@ -717,18 +803,10 @@ if submitted:
         file_name="employee_prediction_report.csv",
         mime="text/csv"
     )
-st.subheader("Prediction History")
+    st.subheader("Prediction History")
 
 if st.session_state.prediction_history:
     history_df = pd.DataFrame(st.session_state.prediction_history)
     st.dataframe(history_df, use_container_width=True)
-    csv = history_df.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        label="Download Prediction History",
-        data=csv,
-        file_name="employee_prediction_history.csv",
-        mime="text/csv"
-    )
 else:
     st.info("No predictions made yet.")
